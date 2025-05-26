@@ -1,0 +1,6 @@
+Stage,Count,Conversion_Rate,Previous_Stage_Rate
+Signup,10000,100.0,100.0
+Multiple Sessions,9892,98.92,98.92
+Engaged,9713,97.13000000000001,98.19045693489689
+Purchaser,9940,99.4,102.33707402450325
+High Value,3694,36.94,37.16297786720322
