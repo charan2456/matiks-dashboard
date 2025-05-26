@@ -1,140 +1,120 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
 import logging
-from typing import Dict, Optional
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class Sidebar:
-    """
-    Class to handle the sidebar navigation and filters for the Matiks dashboard.
-    """
+    """Class for creating and managing the sidebar in the Matiks Gaming Analytics Dashboard."""
     
     def __init__(self):
-        """Initialize the sidebar component."""
-        self.pages = {
-            "Overview": "📊 Dashboard Overview",
-            "User Analytics": "👥 User Analytics",
-            "Revenue Analytics": "💰 Revenue Analytics",
-            "Engagement": "🎮 Engagement Analytics",
-            "Segmentation": "🔍 Segmentation Analysis",
-            "Cohort Analysis": "📈 Cohort Analysis"
-        }
+        """Initialize the Sidebar."""
+        pass
     
     def create_sidebar(self) -> Dict:
         """
-        Create and render the sidebar with navigation and filters.
+        Create the sidebar with navigation and filter options.
         
         Returns:
-            Dictionary containing selected options and filters
+            Dictionary containing selected options
         """
         with st.sidebar:
-            st.title("🎮 Matiks Analytics")
+            # Dashboard title and logo
+            st.markdown("""
+            <div style="text-align: center;">
+                <h1 style="font-size: 1.5rem; margin-bottom: 0;">🎮 Matiks Gaming</h1>
+                <p style="font-size: 0.8rem; margin-top: 0;">Analytics Dashboard</p>
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Add separator
             st.markdown("---")
             
             # Navigation
             st.subheader("Navigation")
-            selected_page = st.radio(
-                "Go to",
-                options=list(self.pages.keys()),
-                format_func=lambda x: self.pages[x],
-                label_visibility="collapsed"
-            )
+            pages = [
+                "Overview",
+                "User Analytics",
+                "Revenue Analytics",
+                "Engagement",
+                "Segmentation",
+                "Cohort Analysis"
+            ]
+            selected_page = st.radio("", pages, index=0, label_visibility="collapsed")
             
-            # Add separator
             st.markdown("---")
             
-            # Date range filter
+            # Date range selection
             st.subheader("Date Range")
             
-            # Default date range (last 30 days)
-            default_start_date = pd.Timestamp.now() - pd.Timedelta(days=30)
-            default_end_date = pd.Timestamp.now()
+            # Predefined date ranges
+            date_ranges = {
+                "Last 7 Days": (datetime.now() - timedelta(days=7), datetime.now()),
+                "Last 30 Days": (datetime.now() - timedelta(days=30), datetime.now()),
+                "Last 90 Days": (datetime.now() - timedelta(days=90), datetime.now()),
+                "Year to Date": (datetime(datetime.now().year, 1, 1), datetime.now()),
+                "All Time": (datetime(2023, 1, 1), datetime.now()),
+                "Custom": None
+            }
             
-            start_date = st.date_input(
-                "Start Date",
-                value=default_start_date,
-                key="start_date"
-            )
+            selected_range = st.selectbox("Select date range", list(date_ranges.keys()))
             
-            end_date = st.date_input(
-                "End Date",
-                value=default_end_date,
-                key="end_date"
-            )
+            if selected_range == "Custom":
+                col1, col2 = st.columns(2)
+                with col1:
+                    start_date = st.date_input("Start date", value=datetime.now() - timedelta(days=30))
+                with col2:
+                    end_date = st.date_input("End date", value=datetime.now())
+            else:
+                start_date, end_date = date_ranges[selected_range]
+                if start_date and end_date:  # Convert to date for display
+                    start_date = start_date.date()
+                    end_date = end_date.date()
             
-            # Validate date range
-            if start_date > end_date:
-                st.error("Error: End date must be after start date.")
-                start_date = end_date - pd.Timedelta(days=1)
-            
-            # Add separator
             st.markdown("---")
             
-            # Filters section
+            # Filters
             st.subheader("Filters")
             
             # Device filter
-            device_types = ["All Devices", "Mobile", "Tablet", "Desktop", "Console"]
-            selected_device = st.selectbox(
-                "Device Type",
-                options=device_types,
-                index=0
-            )
+            devices = ["All Devices", "Mobile", "PC", "Console"]
+            selected_device = st.selectbox("Device", devices)
             
             # Game mode filter
-            game_modes = ["All Modes", "Casual", "Competitive", "Story", "Multiplayer", "Training"]
-            selected_mode = st.selectbox(
-                "Game Mode",
-                options=game_modes,
-                index=0
-            )
+            modes = ["All Modes", "Multiplayer", "Co-op", "Solo"]
+            selected_mode = st.selectbox("Game Mode", modes)
             
             # User segment filter
-            user_segments = ["All Segments", "New Users", "Casual Players", "Regular Players", "Power Users", "Paying Users"]
-            selected_segment = st.selectbox(
-                "User Segment",
-                options=user_segments,
-                index=0
-            )
+            segments = ["All Segments", "Non-spenders", "Low spenders", "Medium spenders", "High spenders"]
+            selected_segment = st.selectbox("User Segment", segments)
             
-            # Add separator
             st.markdown("---")
             
-            # Theme toggle
+            # Settings
             st.subheader("Settings")
-            theme = st.selectbox(
-                "Theme",
-                options=["Light", "Dark"],
-                index=0
-            )
+            
+            # Theme toggle
+            theme = st.selectbox("Theme", ["Light", "Dark"])
+            
+            # Chart type
+            chart_type = st.selectbox("Chart Type", ["Line", "Bar", "Area"])
+            
+            # Refresh data button
+            if st.button("Refresh Data", use_container_width=True):
+                st.cache_data.clear()
+                st.experimental_rerun()
             
             # About section
-            with st.expander("About"):
-                st.markdown("""
-                **Matiks Gaming Analytics Dashboard**
-                
-                This dashboard provides insights into user behavior, revenue patterns, 
-                and engagement metrics for the Matiks gaming platform.
-                
-                Version: 2.0
-                """)
-            
-            # Help section
-            with st.expander("Help"):
-                st.markdown("""
-                **How to use this dashboard:**
-                
-                1. Use the navigation radio buttons to switch between different views
-                2. Set date range to analyze specific time periods
-                3. Apply filters to focus on specific segments
-                4. Hover over charts for detailed information
-                5. Click on legends to show/hide data series
-                """)
+            st.markdown("---")
+            st.markdown("""
+            <div style="text-align: center; font-size: 0.8rem;">
+                <p>Matiks Gaming Analytics v2.0</p>
+                <p>© 2025 Matiks Gaming</p>
+            </div>
+            """, unsafe_allow_html=True)
         
         # Return selected options
         return {
@@ -149,6 +129,7 @@ class Sidebar:
                 "segment": selected_segment
             },
             "settings": {
-                "theme": theme
+                "theme": theme,
+                "chart_type": chart_type
             }
         }
