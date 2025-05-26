@@ -1,47 +1,42 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
+from typing import Dict, List, Optional
 import logging
-from typing import Dict, Optional, List
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class Header:
-    """
-    Class to handle the header section with KPIs for the Matiks dashboard.
-    """
+    """Class for creating and managing the header in the Matiks Gaming Analytics Dashboard."""
     
-    def __init__(self, title: str = "Matiks Gaming Analytics Dashboard"):
-        """
-        Initialize the header component.
-        
-        Args:
-            title: Dashboard title
-        """
-        self.title = title
+    def __init__(self):
+        """Initialize the Header."""
+        pass
     
-    def render_title(self):
-        """Render the dashboard title."""
-        st.title(self.title)
-        st.markdown("""
-        This interactive dashboard provides insights into user behavior, revenue patterns, 
-        and engagement metrics for the Matiks gaming platform.
-        """)
-    
-    def render_date_range(self, start_date: pd.Timestamp, end_date: pd.Timestamp):
+    def render_date_range(self, start_date: datetime, end_date: datetime):
         """
-        Render the selected date range.
+        Render the date range display.
         
         Args:
             start_date: Start date
             end_date: End date
         """
-        st.markdown(f"**Data from:** {start_date.strftime('%B %d, %Y')} to {end_date.strftime('%B %d, %Y')}")
+        try:
+            # Format dates
+            start_str = start_date.strftime("%b %d, %Y")
+            end_str = end_date.strftime("%b %d, %Y")
+            
+            # Display date range
+            st.markdown(f"**Date Range:** {start_str} to {end_str}")
+        except Exception as e:
+            logger.error(f"Error rendering date range: {str(e)}")
+            st.error(f"Error displaying date range: {str(e)}")
     
     def render_kpis(self, kpi_data: Dict[str, Dict]):
         """
-        Render KPI metrics in a row of cards.
+        Render KPI cards.
         
         Args:
             kpi_data: Dictionary of KPI data with format:
