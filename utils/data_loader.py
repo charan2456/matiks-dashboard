@@ -1,232 +1,329 @@
-import pandas as pd
 import streamlit as st
-import os
-from typing import Dict, List, Optional, Union
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import plotly.express as px
+import plotly.graph_objects as go
+from typing import Dict, List, Optional
 import logging
+import os
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Define cache functions outside the class to avoid hashing issues
-@st.cache_data(ttl=3600)  # Cache data for 1 hour
-def cached_load_csv(filepath: str) -> Optional[pd.DataFrame]:
-    """
-    Load data from a CSV file with caching.
-    
-    Args:
-        filepath: Full path to the CSV file
-        
-    Returns:
-        DataFrame containing the data, or None if loading fails
-    """
-    try:
-        if not os.path.exists(filepath):
-            logger.error(f"File {filepath} does not exist")
-            return None
-        
-        df = pd.read_csv(filepath)
-        logger.info(f"Successfully loaded {os.path.basename(filepath)}: {len(df)} rows, {len(df.columns)} columns")
-        logger.info(f"Original columns: {list(df.columns)}")
-        
-        # Normalize column names to lowercase
-        df.columns = [col.lower() for col in df.columns]
-        logger.info(f"Lowercased columns: {list(df.columns)}")
-        
-        # Map specific column names to expected format
-        column_mapping = {
-            'dau': 'daily_active_users',
-            'wau': 'weekly_active_users',
-            'mau': 'monthly_active_users'
-        }
-        
-        # Rename columns based on mapping
-        df = df.rename(columns=column_mapping)
-        logger.info(f"After mapping columns: {list(df.columns)}")
-        
-        # Convert date columns to datetime
-        date_columns = [col for col in df.columns if 'date' in col.lower()]
-        for col in date_columns:
-            try:
-                df[col] = pd.to_datetime(df[col])
-            except Exception as e:
-                logger.warning(f"Could not convert column {col} to datetime: {str(e)}")
-        
-        return df
-    except Exception as e:
-        logger.error(f"Error loading {os.path.basename(filepath)}: {str(e)}")
-        return None
-
 class DataLoader:
-    """
-    A class to handle data loading with caching for the Matiks dashboard.
-    """
+    """Class for loading and processing data for the Matiks Gaming Analytics Dashboard."""
     
     def __init__(self, data_dir: str = "data"):
         """
-        Initialize the DataLoader with the data directory path.
+        Initialize the DataLoader with a data directory.
         
         Args:
-            data_dir: Path to the directory containing data files
+            data_dir: Directory containing data files
         """
         self.data_dir = data_dir
-        self._available_files = self._get_available_files()
-        logger.info(f"DataLoader initialized with {len(self._available_files)} available files")
+        self.cache = {}
     
-    def _get_available_files(self) -> List[str]:
+    def load_dataset(self, filename: str) -> pd.DataFrame:
         """
-        Get a list of available CSV files in the data directory.
-        
-        Returns:
-            List of CSV filenames
-        """
-        try:
-            if not os.path.exists(self.data_dir):
-                logger.warning(f"Data directory {self.data_dir} does not exist")
-                return []
-            
-            files = [f for f in os.listdir(self.data_dir) if f.endswith('.csv')]
-            logger.info(f"Found {len(files)} CSV files in {self.data_dir}")
-            return files
-        except Exception as e:
-            logger.error(f"Error getting available files: {str(e)}")
-            return []
-    
-    def load_data(self, filename: str) -> Optional[pd.DataFrame]:
-        """
-        Load data from a CSV file with caching.
+        Load a dataset from a CSV file.
         
         Args:
-            filename: Name of the CSV file to load
+            filename: Name of the CSV file
+        
+        Returns:
+            DataFrame containing the data
+        """
+        try:
+            # Check if the file exists
+            file_path = os.path.join(self.data_dir, filename)
+            if not os.path.exists(file_path):
+                logger.warning(f"File not found: {file_path}")
+                return pd.DataFrame()
             
-        Returns:
-            DataFrame containing the data, or None if loading fails
-        """
-        filepath = os.path.join(self.data_dir, filename)
-        return cached_load_csv(filepath)
-    
-    def get_available_datasets(self) -> Dict[str, str]:
-        """
-        Get a dictionary of available datasets with descriptive names.
-        
-        Returns:
-            Dictionary mapping file names to descriptive names
-        """
-        dataset_descriptions = {
-            'active_users.csv': 'Active Users (DAU/WAU/MAU)',
-            'revenue_by_date.csv': 'Revenue Over Time',
-            'revenue_by_device.csv': 'Revenue by Device Type',
-            'revenue_by_mode.csv': 'Revenue by Game Mode',
-            'revenue_by_segment.csv': 'Revenue by User Segment',
-            'device_distribution.csv': 'Device Distribution',
-            'game_mode_distribution.csv': 'Game Mode Distribution',
-            'funnel_analysis.csv': 'User Funnel Analysis',
-            'cohort_retention.csv': 'Cohort Retention',
-            'preprocessed_data.csv': 'Complete User Data'
-        }
-        
-        available_datasets = {}
-        for file in self._available_files:
-            if file in dataset_descriptions:
-                available_datasets[file] = dataset_descriptions[file]
-            else:
-                # Create a readable name from the filename
-                name = file.replace('.csv', '').replace('_', ' ').title()
-                available_datasets[file] = name
-        
-        return available_datasets
-    
-    def create_sample_data(self) -> Dict[str, pd.DataFrame]:
-        """
-        Create sample data if real data files are not available.
-        
-        Returns:
-            Dictionary of sample DataFrames
-        """
-        logger.info("Creating sample data")
-        
-        # Sample date range
-        date_range = pd.date_range(start='2023-01-01', end='2023-12-31', freq='D')
-        
-        # Sample active users data
-        active_users = pd.DataFrame({
-            'date': date_range,
-            'daily_active_users': [100 + i % 50 + (i // 30) * 20 for i in range(len(date_range))],
-            'weekly_active_users': [500 + i % 100 + (i // 30) * 50 for i in range(len(date_range))],
-            'monthly_active_users': [1500 + i % 200 + (i // 30) * 100 for i in range(len(date_range))]
-        })
-        
-        # Sample revenue data
-        revenue_by_date = pd.DataFrame({
-            'date': date_range,
-            'revenue': [1000 + i % 500 + (i // 30) * 200 for i in range(len(date_range))],
-            'transactions': [50 + i % 30 for i in range(len(date_range))]
-        })
-        
-        # Sample device distribution
-        device_distribution = pd.DataFrame({
-            'device_type': ['Mobile', 'Tablet', 'Desktop', 'Console', 'Other'],
-            'user_count': [5000, 2500, 1500, 800, 200],
-            'percentage': [50, 25, 15, 8, 2]
-        })
-        
-        # Sample game mode distribution
-        game_mode_distribution = pd.DataFrame({
-            'game_mode': ['Casual', 'Competitive', 'Story', 'Multiplayer', 'Training'],
-            'play_count': [10000, 7500, 5000, 8000, 3000],
-            'percentage': [30, 22, 15, 24, 9]
-        })
-        
-        # Sample funnel analysis
-        funnel_analysis = pd.DataFrame({
-            'stage': ['Visit', 'Sign Up', 'Tutorial', 'First Game', 'Return Next Day', 'Purchase'],
-            'user_count': [10000, 5000, 3000, 2500, 1200, 500],
-            'conversion_rate': [100, 50, 60, 83, 48, 42]
-        })
-        
-        # Sample cohort retention
-        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
-        cohort_data = []
-        for i, month in enumerate(months):
-            for j in range(6):
-                if j <= i:
-                    retention = 100 if j == 0 else int(100 * (0.7 ** j))
-                    cohort_data.append({
-                        'cohort': month,
-                        'month': j,
-                        'retention_rate': retention
-                    })
-        
-        cohort_retention = pd.DataFrame(cohort_data)
-        
-        # Return all sample datasets
-        return {
-            'active_users.csv': active_users,
-            'revenue_by_date.csv': revenue_by_date,
-            'device_distribution.csv': device_distribution,
-            'game_mode_distribution.csv': game_mode_distribution,
-            'funnel_analysis.csv': funnel_analysis,
-            'cohort_retention.csv': cohort_retention
-        }
+            # Load the data
+            df = pd.read_csv(file_path)
+            
+            # Process date columns
+            if 'Date' in df.columns:
+                df['Date'] = pd.to_datetime(df['Date'])
+            
+            # Cache the data
+            self.cache[filename] = df
+            
+            return df
+        except Exception as e:
+            logger.error(f"Error loading dataset {filename}: {str(e)}")
+            return pd.DataFrame()
     
     def load_all_datasets(self) -> Dict[str, pd.DataFrame]:
         """
-        Load all available datasets or create sample data if files don't exist.
+        Load all datasets from the data directory.
         
         Returns:
-            Dictionary mapping file names to DataFrames
+            Dictionary of DataFrames
         """
         datasets = {}
         
-        # Try to load all available files
-        for file in self._available_files:
-            df = self.load_data(file)
-            if df is not None:
-                datasets[file] = df
+        try:
+            # List of expected datasets
+            expected_files = [
+                'active_users.csv',
+                'revenue_by_date.csv',
+                'device_distribution.csv',
+                'game_mode_distribution.csv',
+                'revenue_by_segment.csv',
+                'funnel_analysis.csv',
+                'cohort_retention.csv'
+            ]
+            
+            # Load each dataset
+            for filename in expected_files:
+                datasets[filename] = self.load_dataset(filename)
+            
+            return datasets
+        except Exception as e:
+            logger.error(f"Error loading all datasets: {str(e)}")
+            return datasets
+    
+    def filter_data(self, df: pd.DataFrame, date_range: Dict, filters: Dict) -> pd.DataFrame:
+        """
+        Filter a DataFrame based on date range and filters.
         
-        # If no data was loaded, create sample data
-        if not datasets:
-            logger.warning("No data files could be loaded, creating sample data")
-            datasets = self.create_sample_data()
+        Args:
+            df: DataFrame to filter
+            date_range: Dictionary with start and end dates
+            filters: Dictionary of filters to apply
         
-        return datasets
+        Returns:
+            Filtered DataFrame
+        """
+        try:
+            # Create a copy of the DataFrame
+            filtered_df = df.copy()
+            
+            # Apply date filter if Date column exists
+            if 'Date' in filtered_df.columns and date_range:
+                start_date = pd.Timestamp(date_range['start'])
+                end_date = pd.Timestamp(date_range['end'])
+                filtered_df = filtered_df[(filtered_df['Date'] >= start_date) & (filtered_df['Date'] <= end_date)]
+            
+            # Apply device filter
+            if 'Device_Type' in filtered_df.columns and filters.get('device') != 'All Devices':
+                filtered_df = filtered_df[filtered_df['Device_Type'] == filters['device']]
+            
+            # Apply game mode filter
+            if 'Game_Mode' in filtered_df.columns and filters.get('mode') != 'All Modes':
+                filtered_df = filtered_df[filtered_df['Game_Mode'] == filters['mode']]
+            
+            # Apply segment filter
+            if 'Segment' in filtered_df.columns and filters.get('segment') != 'All Segments':
+                filtered_df = filtered_df[filtered_df['Segment'] == filters['segment']]
+            
+            return filtered_df
+        except Exception as e:
+            logger.error(f"Error filtering data: {str(e)}")
+            return df
+    
+    def calculate_kpis(self, datasets: Dict[str, pd.DataFrame], date_range: Dict) -> Dict[str, Dict]:
+        """
+        Calculate KPIs based on the datasets.
+        
+        Args:
+            datasets: Dictionary of DataFrames
+            date_range: Dictionary with start and end dates
+        
+        Returns:
+            Dictionary of KPI data
+        """
+        kpi_data = {}
+        
+        try:
+            # Calculate DAU, WAU, MAU
+            if 'active_users.csv' in datasets:
+                df = datasets['active_users.csv']
+                
+                if not df.empty and 'Date' in df.columns:
+                    # Filter by date range
+                    start_date = pd.Timestamp(date_range['start'])
+                    end_date = pd.Timestamp(date_range['end'])
+                    df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
+                    
+                    if not df.empty:
+                        # Calculate DAU
+                        if 'DAU' in df.columns:
+                            current_dau = df['DAU'].iloc[-1]
+                            prev_dau = df['DAU'].iloc[0] if len(df) > 1 else current_dau
+                            dau_change = ((current_dau - prev_dau) / prev_dau * 100) if prev_dau > 0 else 0
+                            
+                            kpi_data["Daily Active Users"] = {
+                                "value": current_dau,
+                                "change": dau_change,
+                                "trend": "up" if dau_change >= 0 else "down",
+                                "format": "{:,.0f}"
+                            }
+                        
+                        # Calculate WAU
+                        if 'WAU' in df.columns:
+                            current_wau = df['WAU'].iloc[-1]
+                            prev_wau = df['WAU'].iloc[0] if len(df) > 1 else current_wau
+                            wau_change = ((current_wau - prev_wau) / prev_wau * 100) if prev_wau > 0 else 0
+                            
+                            kpi_data["Weekly Active Users"] = {
+                                "value": current_wau,
+                                "change": wau_change,
+                                "trend": "up" if wau_change >= 0 else "down",
+                                "format": "{:,.0f}"
+                            }
+                        
+                        # Calculate MAU
+                        if 'MAU' in df.columns:
+                            current_mau = df['MAU'].iloc[-1]
+                            prev_mau = df['MAU'].iloc[0] if len(df) > 1 else current_mau
+                            mau_change = ((current_mau - prev_mau) / prev_mau * 100) if prev_mau > 0 else 0
+                            
+                            kpi_data["Monthly Active Users"] = {
+                                "value": current_mau,
+                                "change": mau_change,
+                                "trend": "up" if mau_change >= 0 else "down",
+                                "format": "{:,.0f}"
+                            }
+                        
+                        # Calculate Stickiness
+                        if 'Stickiness' in df.columns:
+                            current_stickiness = df['Stickiness'].iloc[-1]
+                            prev_stickiness = df['Stickiness'].iloc[0] if len(df) > 1 else current_stickiness
+                            stickiness_change = ((current_stickiness - prev_stickiness) / prev_stickiness * 100) if prev_stickiness > 0 else 0
+                            
+                            kpi_data["Stickiness"] = {
+                                "value": current_stickiness,
+                                "change": stickiness_change,
+                                "trend": "up" if stickiness_change >= 0 else "down",
+                                "format": "{:.2f}"
+                            }
+            
+            # Calculate Revenue KPIs
+            if 'revenue_by_date.csv' in datasets:
+                df = datasets['revenue_by_date.csv']
+                
+                if not df.empty and 'Date' in df.columns and 'Revenue' in df.columns:
+                    # Filter by date range
+                    start_date = pd.Timestamp(date_range['start'])
+                    end_date = pd.Timestamp(date_range['end'])
+                    df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
+                    
+                    if not df.empty:
+                        # Calculate Total Revenue
+                        total_revenue = df['Revenue'].sum()
+                        
+                        # Calculate previous period for comparison
+                        date_diff = (end_date - start_date).days
+                        prev_start_date = start_date - timedelta(days=date_diff)
+                        prev_end_date = start_date - timedelta(days=1)
+                        
+                        prev_df = datasets['revenue_by_date.csv']
+                        prev_df = prev_df[(prev_df['Date'] >= prev_start_date) & (prev_df['Date'] <= prev_end_date)]
+                        
+                        prev_total_revenue = prev_df['Revenue'].sum() if not prev_df.empty else total_revenue
+                        revenue_change = ((total_revenue - prev_total_revenue) / prev_total_revenue * 100) if prev_total_revenue > 0 else 0
+                        
+                        kpi_data["Total Revenue"] = {
+                            "value": total_revenue,
+                            "change": revenue_change,
+                            "trend": "up" if revenue_change >= 0 else "down",
+                            "format": "${:,.2f}"
+                        }
+                        
+                        # Calculate ARPU if we have user data
+                        if 'active_users.csv' in datasets:
+                            users_df = datasets['active_users.csv']
+                            
+                            if not users_df.empty and 'Date' in users_df.columns and 'DAU' in users_df.columns:
+                                # Filter by date range
+                                users_df = users_df[(users_df['Date'] >= start_date) & (users_df['Date'] <= end_date)]
+                                
+                                if not users_df.empty:
+                                    # Calculate average DAU
+                                    avg_dau = users_df['DAU'].mean()
+                                    
+                                    # Calculate ARPU
+                                    arpu = total_revenue / (avg_dau * date_diff) if avg_dau > 0 and date_diff > 0 else 0
+                                    
+                                    # Calculate previous ARPU
+                                    prev_users_df = datasets['active_users.csv']
+                                    prev_users_df = prev_users_df[(prev_users_df['Date'] >= prev_start_date) & (prev_users_df['Date'] <= prev_end_date)]
+                                    
+                                    prev_avg_dau = prev_users_df['DAU'].mean() if not prev_users_df.empty else avg_dau
+                                    prev_arpu = prev_total_revenue / (prev_avg_dau * date_diff) if prev_avg_dau > 0 and date_diff > 0 else arpu
+                                    
+                                    arpu_change = ((arpu - prev_arpu) / prev_arpu * 100) if prev_arpu > 0 else 0
+                                    
+                                    kpi_data["ARPU"] = {
+                                        "value": arpu,
+                                        "change": arpu_change,
+                                        "trend": "up" if arpu_change >= 0 else "down",
+                                        "format": "${:.2f}"
+                                    }
+            
+            return kpi_data
+        except Exception as e:
+            logger.error(f"Error calculating KPIs: {str(e)}")
+            return kpi_data
+    
+    def get_cohort_data(self, datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+        """
+        Get cohort data for cohort analysis.
+        
+        Args:
+            datasets: Dictionary of DataFrames
+        
+        Returns:
+            DataFrame with cohort data
+        """
+        try:
+            if 'cohort_retention.csv' in datasets:
+                return datasets['cohort_retention.csv']
+            else:
+                return pd.DataFrame()
+        except Exception as e:
+            logger.error(f"Error getting cohort data: {str(e)}")
+            return pd.DataFrame()
+    
+    def get_funnel_data(self, datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+        """
+        Get funnel data for funnel analysis.
+        
+        Args:
+            datasets: Dictionary of DataFrames
+        
+        Returns:
+            DataFrame with funnel data
+        """
+        try:
+            if 'funnel_analysis.csv' in datasets:
+                return datasets['funnel_analysis.csv']
+            else:
+                return pd.DataFrame()
+        except Exception as e:
+            logger.error(f"Error getting funnel data: {str(e)}")
+            return pd.DataFrame()
+    
+    def get_segment_data(self, datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+        """
+        Get segment data for segment analysis.
+        
+        Args:
+            datasets: Dictionary of DataFrames
+        
+        Returns:
+            DataFrame with segment data
+        """
+        try:
+            if 'revenue_by_segment.csv' in datasets:
+                return datasets['revenue_by_segment.csv']
+            else:
+                return pd.DataFrame()
+        except Exception as e:
+            logger.error(f"Error getting segment data: {str(e)}")
+            return pd.DataFrame()
